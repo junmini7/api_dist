@@ -43,8 +43,6 @@ def follow_stream(userheaders, login='skuuk1zky'):
     return response
 
 
-# 'fr', 'pt', 'other', 'es', 'zh-hk', 'th', 'da', 'uk', 'cs', 'zh', 'en', 'tr', 'ar', 'sv', 'it', 'ko', 'id', 'ru', 'de', 'pl', 'ja', 'no', 'fi'}
-
 client_infos = pickle.load(open('client_infos.pickle', 'rb'))
 
 
@@ -52,13 +50,24 @@ def twitch_api(url):
     return requests.get(url, headers=random.choice(global_header))
 
 
-def langcode_to_langname(lang):
-    return languages.get(alpha2=lang).name
+def langcode_to_langname(
+        lang):  # {'', 'sv', 'fr', 'uk', 'it', 'zh-hk', 'zh', 'en', 'tl', 'da', 'sk', 'hu', 'ro', 'el', 'ru', 'id',
+    # 'no', 'ko', 'pl', 'th', 'de', 'cs', 'ar', 'pt', 'ja', 'es', 'fi', 'tr', 'other'}
+    try:
+        return languages.get(alpha2=lang).name
+    except:
+        return 'other'
 
 
 def langcode_to_country(langcode):
-    langname = langcode_to_langname(langcode[:2])
-    langtocountry = {'Korean': '한국', 'Japanese': '일본', 'English': '영어권'}
+    langname = langcode_to_langname(langcode)
+    langtocountry = {'Modern Greek (1453-)': '그리스', 'Tagalog': '타갈로그어권 (필리핀 등지)', 'Swedish': '스웨덴어권',
+                     'Spanish': '스페인어권 (남미, 스페인 등지)', 'Chinese': '중국', 'French': '프랑스', 'Polish': '폴란드',
+                     'Danish': '덴마크', 'Hungarian': '헝가리', 'Romanian': '루마니아', 'Russian': '러시아', 'Norwegian': '노르웨이',
+                     'Japanese': '일본어',
+                     'Italian': '이탈리아', 'German': '독일', 'Korean': '한국', 'Ukrainian': '우크라이나', 'English': '영어권',
+                     'Indonesian': '인도네시아', 'Arabic': '아랍어권',
+                     'other': '기타 국가', 'Turkish': '튀르키예 (터키)'}
     if langname in langtocountry:
         return langtocountry[langname]
     return langname
@@ -144,7 +153,10 @@ def login_to_something(login, information,
                 pass
         return {i['login']: i[information] for i in login_info(login, True, True)}
 
-time_to_sleep=[0.2]
+
+time_to_sleep = [0.2]
+
+
 def login_info(login, update_follow=False, give_chance_to_hakko=False, provide_detailed_information=False,
                refresh=True):
     if isinstance(login, list):
@@ -153,21 +165,21 @@ def login_info(login, update_follow=False, give_chance_to_hakko=False, provide_d
         islist = False
         login = [login]
     if not refresh:
-        req=[]
+        req = []
         for i in login:
             try:
                 if 'lang' in streamers_data[i].keys():
                     req.append(streamers_data[i])
             except:
                 pass
-        #req = [streamers_data[i] for i in login if not i in hakko_streamers_data and not streamers_data[i]['banned']]
+        # req = [streamers_data[i] for i in login if not i in hakko_streamers_data and not streamers_data[i]['banned']]
         if islist:
             return req
         else:
             try:
                 return req[0]
             except:
-                return {'error':'no such streamers'}
+                return {'error': 'no such streamers'}
     else:
         update_logins(login)
         print(len(login))
@@ -390,7 +402,9 @@ def following(login, end, also_update_logins=True):
                 cursor = False
         data = data[:end]
         req = {"total": total, "data": data}
-    temp_follow = [{'id': j['to_id'], 'login': j['to_login'], 'name': j['to_name'], 'when': twitch_parse(j['followed_at']),'last_updated':dt.now()} for j
+    temp_follow = [
+        {'id': j['to_id'], 'login': j['to_login'], 'name': j['to_name'], 'when': twitch_parse(j['followed_at']),
+         'last_updated': dt.now()} for j
         in
         req['data']]
     if update_following_data:
@@ -572,7 +586,9 @@ def logins_data_crawl():
             j += 1
             try:
                 streamer_login = soup.select_one(
-                    f'body > div.container.mt-5 > div.row > div.col-12.col-md-10 > ul > li:nth-child({j}) > div > div.col-lg-8.col-6 > div > div.col-11 > div > div.col-9.col-lg-10 > div.d-flex.mb-2.flex-wrap > a')[
+                    f'body > div.container.mt-5 > div.row > div.col-12.col-md-10 > ul > li:nth-child({j}) > div > '
+                    f'div.col-lg-8.col-6 > div > div.col-11 > div > div.col-9.col-lg-10 > div.d-flex.mb-2.flex-wrap > '
+                    f'a')[
                     'href']
                 streamer_login = streamer_login[streamer_login.index('-') + 1:]
                 if not streamer_login in logins_data:
@@ -602,15 +618,21 @@ def streamers_data_refresh_by_itself_if_not_lang():
             do.append(i)
     return streamers_data_update(do, False, False)
 
+
 def streamer_search(query):
     try:
         return True, streamers_data[query]
     except:
-        try:
-            return True, {i['display_name'].lower(): i for i in streamers_data.values()}[query.lower()]
-        except:
-            search_data = list(streamers_data.keys()) + [i['display_name'].lower() for i in streamers_data.values()]
-            return False, difflib.get_close_matches(query, search_data)
+        pass
+    try:
+        return True, streamers_data[query.lower()]
+    except:
+        pass
+    try:
+        return True, {i['display_name'].lower(): i for i in streamers_data.values()}[query.lower()]
+    except:
+        search_data = list(streamers_data.keys()) + [i['display_name'].lower() for i in streamers_data.values()]
+        return False, difflib.get_close_matches(query, search_data)
 
 
 def streamer_search_client(query):
@@ -657,9 +679,9 @@ def streamer_following(login, refresh=False):
     if not refresh:
         try:
             with open('following_data.pickle', 'rb') as f:
-                followingdata=pickle.load(f)[login]
-                print(f'used following data of {login} which was updated at {followingdata[0]["last_updated"]}')
-                return followingdata
+                following_data = pickle.load(f)[login]
+                print(f'used following data of {login} which was updated at {following_data[0]["last_updated"]}')
+                return following_data
 
         except:
             pass
@@ -705,6 +727,8 @@ def save_datas():
 def ranking_in_lang(lang="ko"):
     return {k: v for k, v in sorted([i for i in streamers_data.items() if not i[1]['banned'] and i[1]['lang'] == lang],
                                     key=lambda item: item[1]['ranking'][lang])}
+
+
 def ranking_refresh():
     langs = set([streamers_data[i]['lang'] for i in streamers_data if not streamers_data[i]['banned']])
     for lang in langs:
@@ -714,6 +738,7 @@ def ranking_refresh():
                                      key=lambda i: streamers_data[i]['followers'], reverse=True)):
             streamers_data[k]['ranking'] = {lang: i + 1}
     print('ranking refreshed')
+
 
 def gui_maker(title, variable, url, buttonname, submit=False):
     inp = """<div class="col-12 col-md-4">
@@ -727,6 +752,7 @@ def gui_maker(title, variable, url, buttonname, submit=False):
     alerts = ' || '.join([alert % (i[0]) for i in variable])
     inps = ''.join([inp % (i[0], i[1], i[2], i[0]) for i in variable])
     return templates % (title, title, title, inps, buttonname, alerts, url, 'submit()' * submit)
+
 
 ranking_refresh()
 followed_update()
