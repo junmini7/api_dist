@@ -1,7 +1,7 @@
 from datetime import date
 from datetime import timedelta as td
 from datetime import datetime as dt
-
+import itertools
 from typing import Optional
 from twitch import *
 from navercafe import *
@@ -67,6 +67,32 @@ app.add_middleware(
 
 def timeparse(t):
     return dt.strptime(t, '%Y-%m-%dT%H:%M:%SZ') + td(hours=9)
+
+
+def ends_with_jong(kstr):
+    k = kstr[-1]
+    if "가" <= k <= "힣":
+        return (ord(k) - ord("가")) % 28 > 0
+    else:
+        return
+
+
+def yi(kstr):
+    josa = "이" if ends_with_jong(kstr) else "가"
+    return f"{kstr}{josa}"
+
+
+def eul(kstr):
+    josa = "을" if ends_with_jong(kstr) else "를"
+    return f"{kstr}{josa}"
+
+
+def onlyyi(kstr):
+    return "이" if ends_with_jong(kstr) else "가"
+
+
+def onlyeul(kstr):
+    return "을" if ends_with_jong(kstr) else "를"
 
 
 def dttoko(ti):
@@ -231,12 +257,13 @@ async def viewer(broadcaster_id: str):
 
 @app.get("/twitch/addlogingui/", response_class=HTMLResponse)
 async def add_login_gui():
-    return gui_maker('데이터베이스에 스트리머 추가하기',[['login','스트리머의 아이디 (이름은 불가)','']],"'/twitch/addlogin/?logins='+$('#login').val()+'&skip_already_done=false'",'추가하기 (엔터)')
+    return gui_maker('데이터베이스에 스트리머 추가하기', [['login', '스트리머의 아이디 (이름은 불가)', '']],
+                     "'/twitch/addlogin/?logins='+$('#login').val()+'&skip_already_done=false'", '추가하기 (엔터)')
 
 
 @app.get("/twitch/addlogin/", response_class=HTMLResponse)
-async def add_logins(request: Request, logins: List[str] = Query(None), skip_already_done: Optional[bool] = True,
-                     give_chance_to_hakko: Optional[bool] = False):
+def add_logins(request: Request, logins: List[str] = Query(None), skip_already_done: Optional[bool] = True,
+               give_chance_to_hakko: Optional[bool] = False):
     about_skipped = f"%s에 해당하는 스트리머는 {follower_requirements}명 이상의 팔로워를 보유하고 있어 이미 데이터 배이스 상에 존재하며, 옵션이 따라 건너뛰었습니다."
     about_update = f"%s에 해당하는 스트리머는 {follower_requirements}명 이상의 팔로워를 보유하고 있어 이미 데이터 베이스 상에 존재하며, 따라서 이를 업데이트 하였습니다."
     about_added = f"%s에 해당하는 스트리머는 {follower_requirements}명 이상의 팔로워를 보유하고 있기 때문에 데이터베이스에 새롭게 추가되었습니다."
@@ -252,6 +279,8 @@ async def add_logins(request: Request, logins: List[str] = Query(None), skip_alr
                    'still_hakko': about_still_hakko, 'skipped': about_skipped,
                    'hakko_to_streamers': about_hakko_to_streamers, 'streamers_to_hakko': about_streamer_to_hakko}
     result = streamers_data_update(logins, skip_already_done, give_chance_to_hakko)
+    if result == False:
+        return f"<meta charset='utf-8'>{logins}는 트위치에 없는 아이디입니다."
     explanation = "<meta charset='utf-8'> 데이터베이스 추가/업데이트 작업이 완료되었습니다."
     for i in description:
         if result[i]:
@@ -281,95 +310,142 @@ async def popular_is_watching_api(request: Request, broadcaster_login: str):
         f.write(
             f'{dt.now().strftime("%Y/%m/%d %H:%M:%S")} polulariswatching {broadcaster_login} from {ip} {" ".join(map(str, result))}\n')
     return result
+
+
 @app.get("/twitch/populariswatching/", response_class=HTMLResponse)
 async def popular_is_watching_introduce():
-    return gui_maker("방송보는 스트리머",[['query','스트리머 이름 또는 아이디','']],"'/twitch/populariswatchingapi/'+$('#query').val()",'방송보는 스트리머 확인')
+    return gui_maker("방송보는 스트리머", [['query', '스트리머 이름 또는 아이디', '']],
+                     "'/twitch/populariswatchingapi/'+$('#query').val()", '방송보는 스트리머 확인')
 
 
 @app.get("/twitch/populariswatching/{query}", response_class=HTMLResponse)
-async def popular_is_watching_introduce(request:Request,query:str):
-    return gui_maker("방송보는 스트리머",[['query','스트리머 이름 또는 아이디',query]],"'/twitch/populariswatchingapi/'+$('#query').val()",'방송보는 스트리머 확인',True)
+async def popular_is_watching_introduce(request: Request, query: str):
+    return gui_maker("방송보는 스트리머", [['query', '스트리머 이름 또는 아이디', query]],
+                     "'/twitch/populariswatchingapi/'+$('#query').val()", '방송보는 스트리머 확인', True)
+
 
 @app.get("/twitch/populariswatchingapi/{query}", response_class=HTMLResponse)
-async def popular_is_watching_gui(request: Request, query: str):
-    result=streamer_search_client(query)
+def popular_is_watching_gui(request: Request, query: str):
+    result = streamer_search_client(query)
     if not result[0]:
         return result[1]
     else:
-        streamer_data=result[1]
+        streamer_data = result[1]
     ip = str(request.client.host)
     result_dict = streamer_watching(streamer_data['login'])
     with open('log.txt', 'a') as f:
         f.write(
             f'{dt.now().strftime("%Y/%m/%d %H:%M:%S")} polulariswatching {streamer_data["login"]} from {ip} {" ".join(map(str, result_dict))}\n')
 
-    temp = f"<meta charset='utf-8'>{streamer_introduce(streamer_data)}을 시청 중인 {watcher_num(streamer_data['login'])}명의 로그인 시청자 중 팔로워 수 {follower_requirements}명 이상의 스트리머 (팔로워 순)"
+    temp = f"<meta charset='utf-8'>{streamer_introduce(streamer_data)}{onlyeul(streamer_data['display_name'])} 시청 중인 {watcher_num(streamer_data['login'])}명의 로그인 시청자 중 팔로워 수 {follower_requirements}명 이상의 스트리머 (팔로워 순)"
     if not result_dict:
         temp += '가 없습니다.'
     else:
         temp += '<br>' + '<br>'.join([
-            f"<a href='https://twitch.tv/{v['login']}'><img src='{v['profile_image_url']}' width='100' height='100'></a> {v['display_name']} ({k}), 팔로워 {v['followers']}명, {langcode_to_country(v['lang'])} {v['ranking'][v['lang']]}위"
-            for k, v in sorted(result_dict.items(), key=lambda x: x[1]['followers'], reverse=True)])
+            f"<a href='/twitch/populariswatching/{v['login']}'><img src='{v['profile_image_url']}' width='100' height='100'></a> {v['display_name']} ({k}), 팔로워 {v['followers']}명, {langcode_to_country(v['lang'])} {v['ranking'][v['lang']]}위"
+            for k, v in sorted(result_dict.items(), key=lambda x: x[1]['followers'], reverse=True) if
+            k != 'commanderroot'])
     temp += f"<br>팔로워 정보 최종 업데이트 일시 : {streamer_data['last_updated']}<br>시청 정보 최종 업데이트 일시 : {dt.now()}<br>" \
-            f"<a href='/twitch/addlogin/?{'&'.join(['logins=' + k for k in list(result_dict.keys()) + [streamer_data['login']]])}&skip_already_done=false'>여기 등장하는 {len(list(result_dict.keys()) + [streamer_data['login']])}명의 스트리머들의 랭킹 및 팔로워 수 정보 업데이트하기</a>" \
-            "<br>주의 - 스트리머 순위는 스트리머 약 2000명에서 시작해 그들이 팔로우 하는 다른 스트리머들을 계속 탐색하는 식으로 얻어냈기에 순위에 등장하지 않는 스트리머가 있을 확률이 있습니다." \
+            f"<a href='/twitch/addlogin/?{'&'.join(['logins=' + k for k in list(result_dict.keys()) + [streamer_data['login']] if k != 'commanderroot'])}&skip_already_done=false&give_chance_to_hakko=true'>여기 등장하는 {len(list(result_dict.keys()) + [streamer_data['login']])}명의 스트리머들의 랭킹 및 팔로워 수 정보 업데이트하기</a>" \
+            "<br>주의 - 스트리머 순위는 국내 스트리머 약 2000명에서 시작해 그들이 팔로우 하는 다른 스트리머들을 계속 탐색하는 식으로 얻어냈기에 해외 스트리머의 경우에는 순위가 무의미합니다." \
             f"<br>여기에는 없지만 알고 있는 스트리머가 있다면 <a href='/twitch/addlogingui/'>이곳</a>을 눌러 추가해주세요." \
-            f"<br><a href='/twitch/followedbypopular/{streamer_data['login']}'>{streamer_data['display_name']}({streamer_data['login']})를 팔로우하는 유명 스트리머 목록 보기</a>"\
-            f"<br><a href='/twitch/ranking'>(한국에서) 가장 정확한 트위치 팔로워 랭킹 목록</a>"\
+            f"<br><a href='/twitch/following/{streamer_data['login']}'>{streamer_data['display_name']}({streamer_data['login']}){onlyyi(streamer_data['display_name'])} 팔로우하는 유명 스트리머 목록 보기</a> ({recom('following', streamer_data['login'])})" \
+            f"<br><a href='/twitch/followedbypopular/{streamer_data['login']}'>{streamer_data['display_name']}({streamer_data['login']}){onlyeul(streamer_data['display_name'])} 팔로우하는 유명 스트리머 목록 보기</a> ({recom('followedbypopular', streamer_data['login'])})" \
+            f"<br><a href='/twitch/ranking'>(한국에서) 가장 정확한 트위치 팔로워 랭킹 목록</a>" \
             f"<br>정지당한 스트리머들은 표시되지 않습니다. <a href='/twitch/banned'>여기서 그 목록을 확인하세요</a>"
 
     # temp+="<br>made by <a href='http://github.com/junmini7'>junmini7</a> from <a href='http://ece.snu.ac.kr'>SNU ECE</a>"
-    temp += "<br> <a href='https://github.com/junmini7/api'>깃허브 레포지토리</a>"
+
     return temp
 
 
+order_dict = {'follow': ['팔로워 많은', '팔로워 적은'], 'time': ['오래된', '최근']}
+by_options = ['time', 'follow']
+reverse_options = [False, True]
+
+
+def list_multiplier(a, b):
+    return list(itertools.chain.from_iterable([[[j] + [i] for i in b] for j in a]))
+
+
+def recom(fromorto, broadcaster_login):
+    return ', '.join(
+        [f"<a href='/twitch/{fromorto}/{broadcaster_login}?by={i}&reverse={j}'>{order_dict[i][j]} 순</a>" for i, j in
+         list_multiplier(by_options, reverse_options)])
+
+
+@app.get("/twitch/following/{query}", response_class=HTMLResponse)
+async def following_by_popular(request: Request, query: str, by: Optional[str] = 'time',
+                               reverse: Optional[bool] = False):
+    # result = streamer_search_client(query)
+    # if not result[0]:
+    #     return result[1]
+    # else:
+    #     streamer_data = result[1]
+
+    broadcaster_login = query  # streamer_data['login']
+    lists = streamer_following(broadcaster_login)
+    print([i['login'] for i in lists])
+    result = login_info([i['login'] for i in lists], False, False, False, False)
+    recom('following', broadcaster_login)
+    list_dict = {i['login']: i for i in lists}
+    order_ment = order_dict[by][reverse]
+    if by == 'follow':
+        sort_by = lambda x: x['followers']
+        reverse = 1 - reverse
+    elif by == 'time':
+        sort_by = lambda x: list_dict[x['login']]['when']
+    reco = recom('following', broadcaster_login)
+    return f'<meta charset="utf-8">{broadcaster_login}가 팔로우하는 {follower_requirements}명 이상의 팔로워를 가진 유명 스트리머들 ({order_ment} 순) {reco}<br>' + '<br>'.join(
+        [
+            f"<a href='/twitch/populariswatching/{v['login']}'><img src='{v['profile_image_url']}' width='100' height='100'></a> {v['display_name']} ({v['login']}), 팔로워 {v['followers']}명, {langcode_to_country(v['lang'])} {v['ranking'][v['lang']]}위, {broadcaster_login}가 {list_dict[v['login']]['when']}에 팔로우, last update on {list_dict[v['login']]['last_updated']}"
+            for v in sorted(result, key=sort_by, reverse=reverse)])
+
+
 @app.get("/twitch/followedbypopular/{query}", response_class=HTMLResponse)
-async def followed_by_popular(request: Request, query: str):
+async def followed_by_popular(request: Request, query: str, by: Optional[str] = 'time',
+                              reverse: Optional[bool] = False):
     result = streamer_search_client(query)
     if not result[0]:
         return result[1]
     else:
         streamer_data = result[1]
-    broadcaster_login=streamer_data['login']
+    broadcaster_login = streamer_data['login']
     lists = followed_by_streamers(broadcaster_login)
-    #print([i['login'] for i in lists])
+    # print([i['login'] for i in lists])
     result = login_info([i['login'] for i in lists], False, False, False, False)
-
     list_dict = {i['login']: i for i in lists}
-    return f'<meta charset="utf-8">{streamer_introduce(streamer_data)}을 팔로우하는 {follower_requirements}명 이상의 팔로워를 가진 유명 스트리머들 (팔로워 순)<br>' + '<br>'.join(
+    order_ment = order_dict[by][reverse]
+    reco = recom('followedbypopular', broadcaster_login)
+    if by == 'follow':
+        sort_by = lambda x: x['followers']
+        reverse = 1 - reverse
+    elif by == 'time':
+        sort_by = lambda x: list_dict[x['login']]['when']
+
+    return f'<meta charset="utf-8">{streamer_introduce(streamer_data)}{onlyeul(streamer_data["display_name"])} 팔로우하는 {follower_requirements}명 이상의 팔로워를 가진 유명 스트리머들 ({order_ment} 순) {reco}<br>' + '<br>'.join(
         [
-            f"<a href='https://twitch.tv/{v['login']}'><img src='{v['profile_image_url']}' width='100' height='100'></a> {v['display_name']} ({v['login']}), 팔로워 {v['followers']}명, {langcode_to_country(v['lang'])} {v['ranking'][v['lang']]}위, {streamer_data['display_name']}({streamer_data['login']})을 {list_dict[v['login']]['when']}에 팔로우, last update on {list_dict[v['login']]['last_updated']}"
-            for v in sorted(result, key=lambda x: x['followers'], reverse=True)])
+            f"<a href='/twitch/populariswatching/{v['login']}'><img src='{v['profile_image_url']}' width='100' height='100'></a> {v['display_name']} ({v['login']}), 팔로워 {v['followers']}명, {langcode_to_country(v['lang'])} {v['ranking'][v['lang']]}위, {streamer_data['display_name']}({streamer_data['login']})을 {list_dict[v['login']]['when']}에 팔로우, last update on {list_dict[v['login']]['last_updated']}"
+            for v in sorted(result, key=sort_by, reverse=reverse)])
 
 
-@app.get("/twitch/ranking/",response_class=HTMLResponse)
-async def ranking(request: Request, lang: Optional[str]='ko'):
+@app.get("/twitch/ranking/", response_class=HTMLResponse)
+async def ranking(request: Request, lang: Optional[str] = 'ko'):
     ranking_dicts = ranking_in_lang(lang)
-    return f'<meta charset="utf-8">{langcode_to_country(lang)} 내 팔로워 랭킹<br>' +'트위치에서 정지당한 스트리머는 본 목록에 뜨지 않으므로 다음을 참조하세요. <a href="/twitch/banned">정지당한 스트리머 목록</a><br>여기에는 없지만 알고 있는 스트리머가 있다면 <a href="/twitch/addlogingui/">이곳</a>을 눌러 추가해주세요.<br>'+ '<br>'.join(
+    return f'<meta charset="utf-8">{langcode_to_country(lang)} 내 팔로워 랭킹<br>' + '트위치에서 정지당한 스트리머는 본 목록에 뜨지 않으므로 다음을 참조하세요. <a href="/twitch/banned">정지당한 스트리머 목록</a><br>여기에는 없지만 알고 있는 스트리머가 있다면 <a href="/twitch/addlogingui/">이곳</a>을 눌러 추가해주세요.<br>' + '<br>'.join(
         [
-            f"<a href='https://twitch.tv/{v['login']}'><img src='{v['profile_image_url']}' width='100' height='100'></a> {v['display_name']} ({v['login']}), 팔로워 {v['followers']}명, {langcode_to_country(v['lang'])} {v['ranking'][v['lang']]}위 (last update on {v['last_updated']})"
+            f"<a href='/twitch/populariswatching/{v['login']}'><img src='{v['profile_image_url']}' width='100' height='100'></a> {v['display_name']} ({v['login']}), 팔로워 {v['followers']}명, {langcode_to_country(v['lang'])} {v['ranking'][v['lang']]}위 (last update on {v['last_updated']})"
             for v in ranking_dicts.values()])
 
-@app.get("/twitch/banned/",response_class=HTMLResponse)
-async def banned_ui(request:Request,lang: Optional[str]='ko'):
-    banned_dict=currently_banned()
+
+@app.get("/twitch/banned/", response_class=HTMLResponse)
+async def banned_ui(request: Request, lang: Optional[str] = 'ko'):
+    banned_dict = currently_banned()
     return f'<meta charset="utf-8">현재 트위치에서 정지당한 스트리머들 목록<br>' + '<br>'.join(
         [
-            f"<a href='https://twitch.tv/{v['login']}'><img src='{v['profile_image_url']}' width='100' height='100'></a> {v['display_name']} ({v['login']}), 팔로워 {v['followers']}명,  {v['ranking']}위 ({v['last_updated']}에 여전히 밴먹은것 확인)"
-            for v in banned_dict.values()])+f"<br><a href='/twitch/addlogin/?{'&'.join(['logins=' + k for k in list(banned_dict.keys())])}&skip_already_done=false'>여기 등장하는 {len(banned_dict)}명의 정지당한 스트리머들 새로고침하기"
-
-
-@app.get("/twitch/following/{broadcaster_login}", response_class=HTMLResponse)
-async def following_by_popular(request: Request, broadcaster_login: str):
-    lists = streamer_following(broadcaster_login)
-    print([i['login'] for i in lists])
-    result = login_info([i['login'] for i in lists], False, False, False, False)
-
-    list_dict = {i['login']: i for i in lists}
-    return f'<meta charset="utf-8">{broadcaster_login}가 팔로우하는 {follower_requirements}명 이상의 팔로워를 가진 유명 스트리머들 (팔로워 순)<br>' + '<br>'.join(
-        [
-            f"<a href='https://twitch.tv/{v['login']}'><img src='{v['profile_image_url']}' width='100' height='100'></a> {v['display_name']} ({v['login']}), 팔로워 {v['followers']}명, {langcode_to_country(v['lang'])} {v['ranking'][v['lang']]}위, {broadcaster_login}을 {list_dict[v['login']]['when']}에 팔로우, last update on {list_dict[v['login']]['last_updated']}"
-            for v in sorted(result, key=lambda x: x['followers'], reverse=True)])
+            f"<a href='/twitch/populariswatching/{v['login']}'><img src='{v['profile_image_url']}' width='100' height='100'></a> {v['display_name']} ({v['login']}), 팔로워 {v['followers']}명,  {v['ranking']}위 ({v['last_updated']}에 여전히 밴먹은것 확인)"
+            for v in
+            banned_dict.values()]) + f"<br><a href='/twitch/addlogin/?{'&'.join(['logins=' + k for k in list(banned_dict.keys())])}&skip_already_done=false'>여기 등장하는 {len(banned_dict)}명의 정지당한 스트리머들 새로고침하기"
 
 
 @app.get("/twitch/viewerintersection")
@@ -415,7 +491,7 @@ async def iswatchingmultiple(request: Request, id: str, streamers: List[str] = Q
 @app.get("/twitch/iswatchingfollowing")
 async def iswatchingfollowing(request: Request, id):
     ip = str(request.client.host)
-    followlist = following(id, -1)['data']
+    followlist = following(id, -1)
     res = []
     for streamer in followlist:
         watchers = view(streamer['login'])

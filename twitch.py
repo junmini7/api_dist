@@ -57,8 +57,8 @@ def langcode_to_langname(lang):
 
 
 def langcode_to_country(langcode):
-    langname = langcode_to_langname(langcode)
-    langtocountry={'Korean':'한국','Japanese':'일본','English':'영어권'}
+    langname = langcode_to_langname(langcode[:2])
+    langtocountry = {'Korean': '한국', 'Japanese': '일본', 'English': '영어권'}
     if langname in langtocountry:
         return langtocountry[langname]
     return langname
@@ -144,22 +144,30 @@ def login_to_something(login, information,
                 pass
         return {i['login']: i[information] for i in login_info(login, True, True)}
 
-
-
-
-
-def login_info(login, update_follow=False, give_chance_to_hakko=False, provide_detailed_information=False,refresh=True):
+time_to_sleep=[0.2]
+def login_info(login, update_follow=False, give_chance_to_hakko=False, provide_detailed_information=False,
+               refresh=True):
     if isinstance(login, list):
         islist = True
     else:
         islist = False
         login = [login]
     if not refresh:
-        req=[streamers_data[i] for i in login if not i in hakko_streamers_data and not streamers_data[i]['banned']]
+        req=[]
+        for i in login:
+            try:
+                if 'lang' in streamers_data[i].keys():
+                    req.append(streamers_data[i])
+            except:
+                pass
+        #req = [streamers_data[i] for i in login if not i in hakko_streamers_data and not streamers_data[i]['banned']]
         if islist:
             return req
         else:
-            return req[0]
+            try:
+                return req[0]
+            except:
+                return {'error':'no such streamers'}
     else:
         update_logins(login)
         print(len(login))
@@ -169,7 +177,6 @@ def login_info(login, update_follow=False, give_chance_to_hakko=False, provide_d
         print('get login info')
         failed = list(set(login) - set([i['login'] for i in req]))
         banned = []
-
         updated = []
         added = []
         new_hakko = []
@@ -184,10 +191,10 @@ def login_info(login, update_follow=False, give_chance_to_hakko=False, provide_d
                     banned.append(i)
                     streamers_data[i]['banned'] = True
                     if not 'banned_histroy' in streamers_data[i].keys():
-                        streamers_data[i]['banned_history']=[]
+                        streamers_data[i]['banned_history'] = []
                     streamers_data[i]['banned_history'].append(dt.now())
                     streamers_data[i]['last_updated'] = dt.now()
-            failed=list(set(failed)-set(banned))
+            failed = list(set(failed) - set(banned))
             save_datas()
         for j, inf in enumerate(req):
             temp_login = inf['login']
@@ -220,13 +227,7 @@ def login_info(login, update_follow=False, give_chance_to_hakko=False, provide_d
                     inf['lang'] = channel_id_to_lang(inf['id'])
 
                     streamers_data[temp_login] = inf
-                    langs = set([streamers_data[i]['lang'] for i in streamers_data if not streamers_data[i]['banned']])
-                    for lang in langs:
-                        for i, k in enumerate(sorted([j for j in streamers_data.keys() if
-                                                      not streamers_data[j]['banned'] and streamers_data[j][
-                                                          'lang'] == lang],
-                                                     key=lambda i: streamers_data[i]['followers'], reverse=True)):
-                            streamers_data[k]['ranking'] = {lang: i + 1}
+                    ranking_refresh()
                     print(
                         f"{'updated' * (temp_login in updated) + 'added' * (temp_login in added) + 'new hakko' * (temp_login in new_hakko)} \
                         {inf['display_name']}({temp_login}) who have {inf['followers']} followers at the time of {dt.now()} \
@@ -234,8 +235,7 @@ def login_info(login, update_follow=False, give_chance_to_hakko=False, provide_d
             save_datas()
             print(temp_login, 'saved to streamers_data')
 
-
-            time.sleep(0.5)
+            time.sleep(time_to_sleep[0])
 
         # streamers_data = {k: v for k, v in sorted(streamers_data.items(), key=lambda item: item[1]['followers'], reverse=True)}
         # what I found : list object is global variable by default, but once you newly assign a object to it, it moves from global namespace to local namespace
@@ -390,21 +390,18 @@ def following(login, end, also_update_logins=True):
                 cursor = False
         data = data[:end]
         req = {"total": total, "data": data}
-    ret = {"total": req['total'], 'data': [
-        {'id': j['to_id'], 'login': j['to_login'], 'name': j['to_name'], 'when': twitch_parse(j['followed_at'])} for j
+    temp_follow = [{'id': j['to_id'], 'login': j['to_login'], 'name': j['to_name'], 'when': twitch_parse(j['followed_at']),'last_updated':dt.now()} for j
         in
-        req['data']]}
+        req['data']]
     if update_following_data:
         follow = pickle.load(open('following_data.pickle', 'rb'))
-        right_now = dt.now()
-        follow[login] = [{'id': i['id'], 'login': i['login'], 'when': i['when'], 'last_updated': right_now} for i in
-                         ret['data']]
+        follow[login] = temp_follow
         pickle.dump(follow, open('following_data.pickle', 'wb'))
         followed_update()
         del follow
         print(login, 'saved to following_data')
-    update_logins([i['login'] for i in ret['data']])
-    return ret
+    update_logins([i['login'] for i in temp_follow])
+    return temp_follow
 
 
 def followed(login, end):
@@ -506,18 +503,21 @@ def streamers_data_update(logins_data, skip_already_done=False, give_chance_to_h
     total_failed, total_updated, total_added, total_banned, total_new_hakko, total_still_hakko, total_streamers_to_hakko, total_hakko_to_streamers = [], [], [], [], [], [], [], []
     index = 0
     already_done_login = set(streamers_data.keys())
-    skipped=[]
+    skipped = []
     if skip_already_done:
         skipped = list(already_done_login & set(logins_data))
         logins_data = list(set(logins_data) - already_done_login)
-    skipped_hakko=[]
+    skipped_hakko = []
     if not give_chance_to_hakko:
-        skipped_hakko=list(set(hakko_streamers_data.keys())&set(logins_data))
-        logins_data=list(set(logins_data)-set(hakko_streamers_data.keys()))
+        skipped_hakko = list(set(hakko_streamers_data.keys()) & set(logins_data))
+        logins_data = list(set(logins_data) - set(hakko_streamers_data.keys()))
     pbar = tqdm.tqdm(total=len(logins_data))
     while index < len(logins_data):
         queue = logins_data[index:index + 100]
-        results = login_info(queue, True, give_chance_to_hakko, True)
+        try:
+            results = login_info(queue, True, give_chance_to_hakko, True)
+        except:
+            return False
         print(results)
         total_failed += results['failed']
         total_banned += results['banned']
@@ -531,7 +531,7 @@ def streamers_data_update(logins_data, skip_already_done=False, give_chance_to_h
         index += 100
     res = {'updated': total_updated, 'added': total_added, 'failed': total_failed,
            'banned': total_banned, 'skipped_hakko': skipped_hakko, 'new_hakko': total_new_hakko,
-           'still_hakko': total_still_hakko,'skipped':skipped,
+           'still_hakko': total_still_hakko, 'skipped': skipped,
            'hakko_to_streamers': total_hakko_to_streamers, 'streamers_to_hakko': total_streamers_to_hakko}
     pbar.close()
     return res
@@ -602,7 +602,6 @@ def streamers_data_refresh_by_itself_if_not_lang():
             do.append(i)
     return streamers_data_update(do, False, False)
 
-
 def streamer_search(query):
     try:
         return True, streamers_data[query]
@@ -613,26 +612,30 @@ def streamer_search(query):
             search_data = list(streamers_data.keys()) + [i['display_name'].lower() for i in streamers_data.values()]
             return False, difflib.get_close_matches(query, search_data)
 
+
 def streamer_search_client(query):
     streamer_data = streamer_search(query)
     if not streamer_data[0]:
         temp = f"<meta charset='utf-8'>팔로워 {follower_requirements}명 이상인 스트리머 중 '{query}'에 해당하는 스트리머가 없습니다. 아이디 또는 닉네임 둘 다로 검색 가능하니 다시 한번 해보세요. " \
-               f"<br>만약 실제로 있는 스트리머의 아이디(이름은 추가 불가)라면 이 <a href='/twitch/addlogin/?logins={query}'>링크</a>를 눌러 추가해보세요.<br>"
+               f"<br>만약 실제로 있는 스트리머의 아이디(이름은 추가 불가)라면 이 <a href='/twitch/addlogin/?logins={query}&give_chance_to_hakko=true&skip_already_done=false'>링크</a>를 눌러 추가해보세요.<br>"
         if len(streamer_data[1]) == 1:
             temp += f"<a href='/twitch/populariswatching/{streamer_data[1][0]}'>{streamer_data[1][0]}</a>가 찾고 계신 스트리머 인가요? 만약 그렇다면 링크를 누르세요."
         elif len(streamer_data[1]) > 1:
             temp += f"혹시 {', '.join([f'''<a href='/twitch/populariswatching/{streamer}'>{streamer}</a>''' for streamer in streamer_data[1]])} 중에 찾고 계신 스트리머가 있나요? "
-        return False,temp
+        return False, temp
     elif streamer_data[1]['banned']:
-        temp= f"스트리머 {streamer_data[1]['display_name']}({streamer_data[1]['login']})는 {streamer_data[1]['last_updated']} 기준으로 정지된 것을 확인했습니다. <br>현재는 정지가 해제되었을 수 있으니, 만약 이 스트리머의 상태를 업데이트하고 싶다면 <a href='/twitch/addlogin/?logins={streamer_data[1]['login']}&skip_already_done=false'>{streamer_data[1]['login']}</a>으로 접속해서 상태를 갱신하세요."
+        temp = f"스트리머 {streamer_data[1]['display_name']}({streamer_data[1]['login']})는 {streamer_data[1]['last_updated']} 기준으로 정지된 것을 확인했습니다. <br>현재는 정지가 해제되었을 수 있으니, 만약 이 스트리머의 상태를 업데이트하고 싶다면 <a href='/twitch/addlogin/?logins={streamer_data[1]['login']}&skip_already_done=false'>{streamer_data[1]['login']}</a>으로 접속해서 상태를 갱신하세요."
     else:
         streamer_data = streamer_data[1]
         return True, streamer_data
 
+
 def streamer_introduce(streamer_data):
     return f"{langcode_to_country(streamer_data['lang'])} 내 트위치 팔로워 {streamer_data['ranking'][streamer_data['lang']]}위({streamer_data['followers']}명) 인 {streamer_data['display_name']} ({streamer_data['login']})"
+
+
 def currently_banned():
-    return {k:v for k,v in streamers_data.items() if v['banned']}
+    return {k: v for k, v in streamers_data.items() if v['banned']}
 
 
 def streamer_following_update():
@@ -650,14 +653,22 @@ def streamer_following_load():
     return pickle.load(open('following_data.pickle', 'rb'))
 
 
-def streamer_following(login):
-    with open('following_data.pickle', 'rb') as f:
-        return pickle.load(f)[login]
+def streamer_following(login, refresh=False):
+    if not refresh:
+        try:
+            with open('following_data.pickle', 'rb') as f:
+                followingdata=pickle.load(f)[login]
+                print(f'used following data of {login} which was updated at {followingdata[0]["last_updated"]}')
+                return followingdata
+
+        except:
+            pass
+    return following(login, -1, True)
 
 
 def update_logins(login_list):
     logins_data = pickle.load(open('logins_data.pickle', 'rb'))
-    login_list=set(login_list)-set([''])
+    login_list = set(login_list) - set([''])
     print(f"updated {len(set(login_list) - set(logins_data))} streamers to logins_data.pickle")
     logins_data = list(set(logins_data) | set(login_list))
     pickle.dump(logins_data, open('logins_data.pickle', 'wb'))
@@ -685,26 +696,39 @@ def followed_by_streamers(login):
     with open('followed_data.pickle', 'rb') as f:
         return pickle.load(f)[login]
 
+
 def save_datas():
-    pickle.dump(streamers_data,open('streamers_data.pickle','wb'))
-    pickle.dump(hakko_streamers_data,open('hakko_streamers_data.pickle','wb'))
+    pickle.dump(streamers_data, open('streamers_data.pickle', 'wb'))
+    pickle.dump(hakko_streamers_data, open('hakko_streamers_data.pickle', 'wb'))
+
 
 def ranking_in_lang(lang="ko"):
-    return {k: v for k, v in sorted([i for i in streamers_data.items() if not i[1]['banned'] and i[1]['lang']==lang] , key=lambda item: item[1]['ranking'][lang])}
+    return {k: v for k, v in sorted([i for i in streamers_data.items() if not i[1]['banned'] and i[1]['lang'] == lang],
+                                    key=lambda item: item[1]['ranking'][lang])}
+def ranking_refresh():
+    langs = set([streamers_data[i]['lang'] for i in streamers_data if not streamers_data[i]['banned']])
+    for lang in langs:
+        for i, k in enumerate(sorted([j for j in streamers_data.keys() if
+                                      not streamers_data[j]['banned'] and streamers_data[j][
+                                          'lang'] == lang],
+                                     key=lambda i: streamers_data[i]['followers'], reverse=True)):
+            streamers_data[k]['ranking'] = {lang: i + 1}
+    print('ranking refreshed')
 
 def gui_maker(title, variable, url, buttonname, submit=False):
-    inp="""<div class="col-12 col-md-4">
+    inp = """<div class="col-12 col-md-4">
           <div class="row px-3">
             <label for="%s" class="col-12">%s</label>
             <input type="string" class="col-12 py-2" value="%s" id="%s">
           </div>
         </div>"""
-    alert='$("#%s").val() == ""'
-    templates=open('gui_templete.html','r').read()
-    alerts=' || '.join([alert%(i[0]) for i in variable])
-    inps=''.join([inp%(i[0],i[1],i[2],i[0]) for i in variable])
-    return templates%(title, title, title, inps, buttonname, alerts,url,'submit()'*submit)
+    alert = '$("#%s").val() == ""'
+    templates = open('gui_templete.html', 'r').read()
+    alerts = ' || '.join([alert % (i[0]) for i in variable])
+    inps = ''.join([inp % (i[0], i[1], i[2], i[0]) for i in variable])
+    return templates % (title, title, title, inps, buttonname, alerts, url, 'submit()' * submit)
 
+ranking_refresh()
 followed_update()
 
 if __name__ == '__main__':
