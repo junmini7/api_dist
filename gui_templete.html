@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<script src="https://code.jquery.com/jquery-3.6.0.js" integrity="sha256-H+K7U5CnXl1h5ywQfKtSj8PCmoN9aaq30gDh27Xc0jk=" crossorigin="anonymous"></script>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css" integrity="sha384-zCbKRCUGaJDkqS1kPbPd7TveP5iyJE0EjAuZQTgFLD2ylzuqKfdKlfG/eSrtxUkn" crossorigin="anonymous">
+    <style>
+    .small-word{
+  font-size: 0.7rem;
+  padding-left: 10px;
+}
+
+.title{
+  font-size: 1.3rem;
+}
+
+.centering{
+  margin: 0 auto;
+  text-align: center;
+}
+
+button{
+  width : 100%%;
+}
+</style>
+    <title>%s</title>
+    <meta property="og:title" content="%s">
+
+  </head>
+  <body>
+    <div class="container">
+      <div class="row my-3 centering">
+        <h1 class="centering">%s</h1>
+      </div>
+      <div class="row">
+          %s
+      </div>
+      <div class="row my-3 centering">
+        <div class="col-12">
+          <button class="btn btn-primary py-3">
+            %s
+          </button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-12 alert alert-primary" id="result">
+        </div>
+      </div>
+<div class="row">
+        <div class="col-12 alert alert-primary">
+made by <a href='https://github.com/junmini7'>junmini7</a> from <a href='https://ece.snu.ac.kr/'>SNU ECE</a>
+</div>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-fQybjgWLrvvRgtW6bFlB7jaZrFsaBXjsOMm/tB9LTS58ONXgqbR9W8oWht/amnpF" crossorigin="anonymous"></script>
+    <script>
+    function submit() {
+ if (%s) {
+        alert("제대로 입력되지 않았습니다");
+    }
+ else {
+     $('#result').text('로딩 중');
+    $.ajax({
+        type: 'get',
+        contentType: 'application/json',
+        url: %s,
+        dataType: 'html'
+    }).done(function(data) {
+        $('#result').html(data)
+    })
+     }
+}
+$(document).ready(function () {
+    %s
+  $("button").click(function () {
+    submit();
+  });
+$("input").on('keyup', function(e){
+            if(e.key==='Enter'||e.keyCode===13){
+                submit();
+            }
+        })
+});
+
+</script>
+
+  </body>
+</html>
