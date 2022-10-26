@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <script src="https://code.jquery.com/jquery-3.6.0.js" integrity="sha256-H+K7U5CnXl1h5ywQfKtSj8PCmoN9aaq30gDh27Xc0jk=" crossorigin="anonymous"></script>
     <!-- Bootstrap CSS -->
-      <script async="" src="https://www.googletagmanager.com/gtag/js?id=G-6Z3LQKLDKF"></script>
       <script>
            window.dataLayer = window.dataLayer || [];
         function gtag() { dataLayer.push(arguments); }
@@ -90,37 +89,30 @@ function openInNewTab(url) {
         }
 
         .submit_btn {
-            width: 100%;
+            width: 100%%;
         }
     </style>
 
-    <title>{{title}}</title>
-    <meta property="og:title" content="{{title}}">
+    <title>%s</title>
+    <meta property="og:title" content="%s">
 
   </head>
   <body>
     <div class="container">
-      <div id="title" class="row my-3 centering text-center">
-        <h1 class="centering">{{title}}</h1>
+      <div id="title" class="row my-3 centering centering_text">
+        <h1 class="centering">%s</h1>
       </div>
       <div id="input_box" class="row">
-{% for i in variable %}
-              <div class="col-12 col-md-6 centering">
-    <div class="row px-3">
-        <label for="{{i[0]}}}" class="col-12">{{i[1]}}</label>
-        <input type="string" class="col-12 py-2" value="{{i[2]}}" id="{{i[0]}}">
-    </div>
-</div>
-{% endfor %}
+          %s
       </div>
 
       <div id="input_button" class="row my-3 centering">
         <div class="col-12 col-md-6 centering">
-
-          <button id="submit_button" class="submit_btn btn btn-primary py-3" onclick="submit()">
-              {{buttonname}}
+          <form>
+          <button id="submit_button" class="submit_btn btn btn-primary py-3" type="submit">
+            %s
           </button>
-
+            </form>
         </div>
       </div>
       <div class="row">
@@ -165,29 +157,19 @@ function openInNewTab(url) {
 </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-OERcA2EqjJCMA+/3y+gxIOqMEjwtxJY7qPCqsdltbNJuaOe923+mo//f6V8Qbsw3" crossorigin="anonymous"></script>
     <script>
-            function copyToClipboard(val) {
-    var t = document.createElement("textarea");
-    document.body.appendChild(t);
-    t.value = val;
-    t.select();
-    document.execCommand('copy');
-    document.body.removeChild(t);
-    alert('복사되었습니다!');
-    }
       var submitting=false;
+         console.log(submitting);
 
     function submit() {
- if ({{condition}}) {
+ if (%s) {
         alert("제대로 입력되지 않았습니다");
     }
  else if (!submitting){
-     $('#result').show();
    submitting=true;
    console.log(submitting);
      $('#result').html('<div style="text-align:center"><img width="300" height="200" src="https://woowakgood.live/loading-2.gif"></div>');
      $('#submit_button').attr("disabled",true);
-     window.history.pushState(null,null,{{page_url}});
-     var url={{url}};
+     var url=%s;
      $.ajax({
         type: 'get',
         contentType: 'application/json',
@@ -203,21 +185,13 @@ function openInNewTab(url) {
      }
 }
 $(document).ready(function () {
-
-    $('#result').hide();
-    {% if submit %}
-        submit();
-    {% endif %}
+    %s
 
 $("input").on('keyup', function(e){
             if(e.key==='Enter'||e.keyCode===13){
                 submit();
             }
         })
-    $('#copybtn1').click(function() {
-      copyToClipboard('https://manition.tistory.com/');
-      alert('주소를 복사하였습니다');
-    });
 });
 
 </script>

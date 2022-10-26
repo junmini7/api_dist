@@ -1,4 +1,10 @@
-<div class="col-auto col-12 col-md-3 col-sm-6" style="display:flex; margin-bottom: 8px;">
-        <div style=" align-self:center; margin-right: 20px"><a href="/twitch/populariswatching/%s"><img src="%s" width="100" height="100"></a></div>
-        <div style=" align-self:center;">%s (%s)<br>팔로워 <b>%d</b>명<br>%s <b>%d</b>위<br><i class="%s"></i> %s</div>
+<div class="col-auto col-12 col-md-6 col-lg-4 col-sm-6 col-xl-3" style="display:flex; margin-bottom: 8px;">
+    <div style=" align-self:center; margin-right: 20px"><a href="/twitch/populariswatching/{{login}}"><img
+            src="{{image_url}}" width="100" height="100"></a></div>
+    <div style=" align-self:center;"><a href="/twitch/populariswatching/{{login}}">{{name}} <font size="2em">({{login}})</a></font> <a
+            href="https://twitch.tv/{{login}}"><i class="bi fa-brands fa-twitch"></i></a>
+        <br>팔로워 <b>{{follower}}</b>명<br>{{country}} <b>{{rank}}</b>위 <a
+                href="/twitch/addlogin/?logins={{login}}&skip_already_done=false&give_chance_to_hakko=true"><font
+                size="2em">{{time}}전</font></a><br><i class="{{icon}}"></i> {{following}}
     </div>
+</div>
