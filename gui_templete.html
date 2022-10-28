@@ -99,15 +99,15 @@ function openInNewTab(url) {
 
   </head>
   <body>
-    <div class="container">
+    <div class="container align-items-center">
       <div id="title" class="row my-3 centering text-center">
         <h1 class="centering">{{title}}</h1>
       </div>
-      <div id="input_box" class="row">
+      <div id="input_box" class="row col-12 col-md-8 centering">
 {% for i in variable %}
-              <div class="col-12 col-md-6 centering">
+              <div class="col-{{input_size}} col-md-{{input_size_2}} centering">
     <div class="row px-3">
-        <label for="{{i[0]}}}" class="col-12">{{i[1]}}</label>
+        <label for="{{i[0]}}" class="col-12">{{i[1]}}</label>
         <input type="string" class="col-12 py-2" value="{{i[2]}}" id="{{i[0]}}">
     </div>
 </div>
