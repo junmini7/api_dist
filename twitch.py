@@ -364,6 +364,7 @@ def streamer_info(login_queue, provide_detailed_information_instead_of_data=Fals
             inf['last_updated'] = dt.now()
             streamers_data[temp_login].update(inf)
             ranking_refresh()
+            inf.update(streamers_data[temp_login])
             if not temp_login in streamers_data:
                 added.append(temp_login)
             else:
@@ -549,7 +550,7 @@ now_working_on_view = []
 
 
 def view(login):
-    now = time.time()
+
     while login in now_working_on_view:  # or time.time()<now+100:
         time.sleep(0.25)
     if login in temp_view and (time.time() - temp_view[login]['time']) < 60:
@@ -565,7 +566,9 @@ def view(login):
     data = json.loads(response.text)
     viewers = data['chatters']['viewers']
     broadcasters = data['chatters']['broadcaster']
+
     vips = data['chatters']['vips']
+
     moderators = data['chatters']['moderators']
     staff = data['chatters']['staff']
     count = int(data['chatter_count'])
@@ -726,10 +729,14 @@ def streamer_search(query):
     if query.lower() in name_to_login:
         return True, name_to_login[query.lower()]
     if isvalidlogin(query):
-        try:
-            return True, streamer_info(query)[0]
-        except:
-            pass
+        print('try to add in streamer search')
+        streamer_result = streamer_info(query)
+        if streamer_result:
+            streamer_data=streamer_result[0]
+            assert 'followers' in streamer_data
+            assert 'ranking' in streamer_data
+            return True, streamer_data
+
     search_data = list(set(streamers_data.keys())| {i['display_name'].lower() for i in streamers_data.values()})
     return False, difflib.get_close_matches(query, search_data)
 
@@ -748,8 +755,10 @@ def streamer_search_client(query):
         temp = f"스트리머 {streamer_data[1]['display_name']}({streamer_data[1]['login']})는 {streamer_data[1]['last_updated']} 기준으로 정지된 것을 확인했습니다. <br>현재는 정지가 해제되었을 수 있으니, 만약 이 스트리머의 상태를 업데이트하고 싶다면 <a href='{api_url}/twitch/addlogin/?logins={streamer_data[1]['login']}&skip_already_done=false'>{streamer_data[1]['login']}</a>으로 접속해서 상태를 갱신하세요."
         return False, temp
     elif not 'followers' in streamer_data[1]:
-        streamer_data = streamer_info(streamer_data['login'])[0]
+        print('no followers on streamer search client')
+        streamer_data = streamer_info(streamer_data[1]['login'])[0]
         assert 'followers' in streamer_data
+        assert 'ranking' in streamer_data
         return True, streamer_data
     else:
         streamer_data = streamer_data[1]
@@ -854,13 +863,13 @@ def gui_maker(title, variable, url, buttonname, page_url, submit=False):
                                condition=' || '.join([f'$("#{i[0]}").val() == ""' for i in variable]),input_size=12,input_size_2=int(12/len(variable)))
 
 
-def streamer_info_maker(v, now, known_following, followed_streamers_data_dict):
+def streamer_info_maker(v, now, known_following, followed_streamers_data_dict,original_streamer):
     return streamer_info_template.render(login=v['login'], image_url=v['profile_image_url'], name=v['display_name'],
                                          follower=v['followers'], country=langcode_to_country(v['lang']),
                                          rank=v['ranking'][v['lang']], time=tdtoko(now - v['last_updated']),
                                          icon=follow_icon(known_following, followed_streamers_data_dict, v['login']),
                                          following=follow_about_heart(known_following, followed_streamers_data_dict,
-                                                                      v['login']),api_url=api_url)
+                                                                      v['login']),api_url=api_url,login_disp=v['login']!=v['display_name'].lower(),is_manager=('role' in v and original_streamer in v['role']))
 
 def just_crawl_logins(logins_queue):
     streamers_data_update(logins_queue, False, False, False, False)
