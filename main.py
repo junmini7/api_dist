@@ -140,6 +140,9 @@ def yi(kstr):
     josa = "이" if ends_with_jong(kstr) else "가"
     return f"{kstr}{josa}"
 
+def gwa(kstr):
+    josa = "과" if ends_with_jong(kstr) else "와"
+    return f"{kstr}{josa}"
 
 def eul(kstr):
     josa = "을" if ends_with_jong(kstr) else "를"
@@ -467,10 +470,44 @@ def popular_is_watching_gui(request: Request, query: str, follower_requirements:
 
 
 def make_from_prev(data, follower_requirements):
+    temp=data['head'] % follower_requirements
+    streamer_data=data['streamer_data']
     if not data['middle']:
-        return data['head'] % follower_requirements + data['end']
-    return data['head'] % follower_requirements + ''.join(
-        [i[0] for i in data['middle'] if i[1] >= follower_requirements]) + data['end']
+        temp+= """가 없습니다.<br><br><div class='text-center'><button class='btn btn-primary' id='copy_link' onclick='copyToClipboard(window.location.href)'>현재 보고 있는 결과 링크 복사하기</button></div><br>"""
+
+    else:
+
+        validstreamers={u:v for u,v in data['middle'].items() if v['followers']>follower_requirements}
+        addloginlists=list(validstreamers)+[streamer_data['login']]
+        manager_num=len([i for i in validstreamers if validstreamers[i]['is_manager']])
+        if manager_num:
+            temp += '는 총 %d명이며, 그 중 매니저는 %d명입니다.' %(len(validstreamers),manager_num)
+        else:
+            temp += '는 총 %d명입니다.' %(len(validstreamers))
+
+
+        temp += '<br><br><div class="row">'
+        temp+=''.join([i['article'] for i in validstreamers.values()])
+        temp += "</div>"
+        # if streamer_data["description"].strip():
+        #     temp+=f'<br><br><div class="text-center font-weight-bold"><h4> <i class="fa-solid fa-quote-left"></i>{streamer_data["description"].strip()}<i class="fa-solid fa-quote-right"></i></h4></div><br>'
+        temp += f"""<br><div class='text-center'><button class='btn btn-primary' id='copy_link' onclick='copyToClipboard(window.location.href)'>현재 보고 있는 결과 링크 복사하기</button></div><br>"""
+        temp += f"<br><a href='{api_url}/twitch/addlogin/?{'&'.join(['logins=' + k for k in addloginlists])}&skip_already_done=false&give_chance_to_hakko=true'>여기 등장하는 스트리머들의 랭킹 및 팔로워 수 정보 업데이트하기</a>"
+
+    temp += f"<br>시청 정보 최종 업데이트 일시 : {dt.now()}<br>{streamer_data['display_name']}의 팔로워 정보 최종 업데이트 일시 : {streamer_data['last_updated']}" \
+           f"<br>주의 - 스트리머 순위는 국내 스트리머 약 2000명에서 시작해 그들이 팔로우 하는 다른 스트리머들을 계속 탐색하는 식으로 얻어냈기에 적은 수의 팔로워를 가진 경우나, 해외 스트리머의 경우에는 순위가 무의미합니다." \
+           f"<br>여기에는 없지만 알고 있는 스트리머가 있다면 <a href='{api_url}/twitch/addlogingui/'>이곳</a>을 눌러 추가해주세요." \
+           f"<br><a href='/twitch/following?query={streamer_data['login']}'>{streamer_data['display_name']}({streamer_data['login']}){onlyyi(streamer_data['display_name'])} 팔로우하는 유명 스트리머 목록 보기</a> ({recom('following', streamer_data['login'])})" \
+           f"<br><a href='/twitch/followed?query={streamer_data['login']}'>{streamer_data['display_name']}({streamer_data['login']}){onlyeul(streamer_data['display_name'])} 팔로우하는 유명 스트리머 목록 보기</a> ({recom('followed', streamer_data['login'])})" \
+           f"<br><a href='/twitch/rank?lang=ko'>(한국에서) 가장 정확한 트위치 팔로워 랭킹 목록</a>" \
+           f"<br>정지당한 스트리머들은 표시되지 않습니다. <a href='/twitch/banned'>여기서 그 목록을 확인하세요.</a>" \
+           f"<br>순위 옆에 표시되는 시간은 마지막으로 팔로워 수가 업데이트 된 시간을 의미합니다." \
+           f"<br><i class='fa-solid fa-heart red'></i>, <i class='fa-solid fa-heart'></i>, <i class='fa-solid fa-heart black'></i>, <i class='fa-regular fa-heart'></i>, <i class='fa-solid fa-question'></i>는 각각 {gwa(streamer_data['display_name'])} 해당 스트리머가 상호 팔로우, 해당 스트리머만 {eul(streamer_data['display_name'])} 팔로우, {streamer_data['display_name']}만 해당 스트리머를 팔로우, 서로 팔로우 하지 않음, 아직 상태를 모름 을 의미하며, 날짜는 각 스트리머가 {eul(streamer_data['display_name'])} 팔로우한 일시입니다." \
+           f"<br> 각 링크들을 누르면 해당하는 항목이 새로고침됩니다." \
+           f"<br>트위치 채팅창 옆에서 볼 수 있는 참여자 목록에 '커뮤니티의 일부 구성원만 이곳에 나열됩니다.'라고 적혀 있는 것처럼, 트위치 웹사이트에서는 더 이상 전체 시청자 목록을 제공하지 않고 수천명의 시청자 목록 중 몇백명만 랜덤 추출해서 보여 주고 있기 때문에 이 사이트에서 시청 중이라고 표시되더라도 트위치에서는 나오지 않습니다. (이 사이트는 트위치의 별도 개발자 API를 이용하였습니다.)" \
+           f"<br>업데이트 때문에 가끔 껐다 켜질 수 있으니, 너무 오래 로딩 중이라면 새로고침 해주세요."
+    return temp
+
 
 
 roles = ['moderators', 'vips', 'staff']
@@ -502,60 +539,36 @@ def popularwatchingworker(streamer_data):
                              k in streamers_data and 'ranking' in streamers_data[k] and streamers_data[k][
                                  'followers'] > 30]
     watcher_count = watchers['count']
+    streamer_following_data={i['login']:i for i in streamer_following(streamer_data['login'], False)}
 
     with open('log.txt', 'a') as f:
         f.write(
             f'{dt.now().strftime("%Y/%m/%d %H:%M:%S")} polulariswatching {streamer_data["login"]} {" ".join(map(str, popular_watching_list))}\n')
-    head = ""
-    if broadcaster_in_stream:
-        head += f'{streamer_data["display_name"]}({streamer_data["login"]}) 현재 Broadcaster 접속중 <a href="https://twitch.tv/{streamer_data["login"]}"><i class="bi fa-brands fa-twitch"></i></a><br>'
-    head += f"{streamer_introduce(streamer_data)}{onlyeul(streamer_data['display_name'])} 지금 시청 중인 {watcher_count}명의 로그인 시청자 중 팔로워 수 %d명 이상의 스트리머 (팔로워 순)"
     try:
-        followed_streamers_data_dict = {i['login']: i for i in settings.followed_data[streamer_data['login']]}
+        streamer_followed_data = {i['login']: i for i in settings.followed_data[streamer_data['login']]}
     except:
-        print('not exist in followed')
-        followed_streamers_data_dict = {}
-    known_following = list(following_data.keys())
+        print('doesnt exist in followed')
+        streamer_followed_data = {}
+
     for bot in bots:
         if bot in popular_watching_list:
             popular_watching_list.remove(bot)
-    end = ""
-    if not popular_watching_list:
-        end += '가 없습니다.'
-        end += f"""<br><br><div class='text-center'><button class='btn btn-primary' id='copy_link' onclick='copyToClipboard(window.location.href)'>현재 보고 있는 결과 링크 복사하기</button></div><br>"""
-        middle = []
-    else:
+    head = ""
+    if broadcaster_in_stream:
+        head += f'{streamer_data["display_name"]}({streamer_data["login"]}) 현재 Broadcaster 접속중 <a href="https://twitch.tv/{streamer_data["login"]}"><i class="bi fa-brands fa-twitch"></i></a><br>'
+    head += f"{streamer_introduce(streamer_data)}{onlyeul(streamer_data['display_name'])} 지금 시청 중인 {watcher_count}명의 로그인 시청자 중 팔로워 수 %d명 이상의 스트리머"
 
-        listtoappend = popular_watching_list + [streamer_data['login']]
-        middle = [[streamer_info_maker(streamers_data[k], dt.now(), known_following, followed_streamers_data_dict,streamer_data['login']),
-                   streamers_data[k]['followers']] for k in
-                  sorted(popular_watching_list, key=lambda x: streamers_data[x]['followers'],
-                         reverse=True)]
-        head += '<br><br><div class="row">'
-        end += "</div>"
-        # if streamer_data["description"].strip():
-        #     temp+=f'<br><br><div class="text-center font-weight-bold"><h4> <i class="fa-solid fa-quote-left"></i>{streamer_data["description"].strip()}<i class="fa-solid fa-quote-right"></i></h4></div><br>'
-        end += f"""<br><div class='text-center'><button class='btn btn-primary' id='copy_link' onclick='copyToClipboard(window.location.href)'>현재 보고 있는 결과 링크 복사하기</button></div><br>"""
-        end += f"<br><a href='{api_url}/twitch/addlogin/?{'&'.join(['logins=' + k for k in listtoappend])}&skip_already_done=false&give_chance_to_hakko=true'>여기 등장하는 스트리머들의 랭킹 및 팔로워 수 정보 업데이트하기</a>"
-
-    end += f"<br>시청 정보 최종 업데이트 일시 : {dt.now()}<br>{streamer_data['display_name']}의 팔로워 정보 최종 업데이트 일시 : {streamer_data['last_updated']}" \
-           f"<br>주의 - 스트리머 순위는 국내 스트리머 약 2000명에서 시작해 그들이 팔로우 하는 다른 스트리머들을 계속 탐색하는 식으로 얻어냈기에 적은 수의 팔로워를 가진 경우나, 해외 스트리머의 경우에는 순위가 무의미합니다." \
-           f"<br>여기에는 없지만 알고 있는 스트리머가 있다면 <a href='{api_url}/twitch/addlogingui/'>이곳</a>을 눌러 추가해주세요." \
-           f"<br><a href='/twitch/following?query={streamer_data['login']}'>{streamer_data['display_name']}({streamer_data['login']}){onlyyi(streamer_data['display_name'])} 팔로우하는 유명 스트리머 목록 보기</a> ({recom('following', streamer_data['login'])})" \
-           f"<br><a href='/twitch/followed?query={streamer_data['login']}'>{streamer_data['display_name']}({streamer_data['login']}){onlyeul(streamer_data['display_name'])} 팔로우하는 유명 스트리머 목록 보기</a> ({recom('followed', streamer_data['login'])})" \
-           f"<br><a href='/twitch/rank?lang=ko'>(한국에서) 가장 정확한 트위치 팔로워 랭킹 목록</a>" \
-           f"<br>정지당한 스트리머들은 표시되지 않습니다. <a href='/twitch/banned'>여기서 그 목록을 확인하세요.</a>" \
-           f"<br>순위 옆에 표시되는 시간은 마지막으로 팔로워 수가 업데이트 된 시간을 의미합니다." \
-           f"<br><i class='fa-solid fa-heart'></i>, <i class='fa-regular fa-heart'></i>, <i class='fa-solid fa-question'></i>는 각각 해당 스트리머가 {eul(streamer_data['display_name'])} 팔로우 / 팔로우 하지 않음 / 아직 모름 을 의미하며, 날짜는 팔로우 일시입니다." \
-           f"<br> 각 링크들을 누르면 해당하는 항목이 새로고침됩니다." \
-           f"<br>트위치 채팅창 옆에서 볼 수 있는 참여자 목록에 '커뮤니티의 일부 구성원만 이곳에 나열됩니다.'라고 적혀 있는 것처럼, 트위치 웹사이트에서는 더 이상 전체 시청자 목록을 제공하지 않고 수천명의 시청자 목록 중 몇백명만 랜덤 추출해서 보여 주고 있기 때문에 이 사이트에서 시청 중이라고 표시되더라도 트위치에서는 나오지 않습니다. (이 사이트는 트위치의 별도 개발자 API를 이용하였습니다.)" \
-           f"<br>업데이트 때문에 가끔 껐다 켜질 수 있으니, 너무 오래 로딩 중이라면 새로고침 해주세요."
+    middle = {k:{'article':streamer_info_maker(streamers_data[k], dt.now(), streamer_followed_data,
+                                   streamer_data['login'], streamer_following_data),'followers':
+               streamers_data[k]['followers'],'is_manager':('role' in streamers_data[k] and streamer_data['login'] in streamers_data[k]['role'])} for k in
+              sorted(popular_watching_list, key=lambda x: streamers_data[x]['followers'],
+                     reverse=True)}
 
     # temp+="<br>made by <a href='http://github.com/junmini7'>junmini7</a> from <a href='http://ece.snu.ac.kr'>SNU ECE</a>"
-    temp_watching[streamer_data['login']] = {'content': {'head': head, 'middle': middle, 'end': end},
+    temp_watching[streamer_data['login']] = {'content': {'head': head, 'middle': middle,'streamer_data':streamer_data},
                                              'time': time.time()}
     temp_working[streamer_data['login']] = False
-    return {'head': head, 'middle': middle, 'end': end}
+    return {'head': head, 'middle': middle,'streamer_data':streamer_data}
 
 
 # except:
@@ -574,6 +587,9 @@ def recom(fromorto, broadcaster_login):
          in
          list_multiplier(by_options, reverse_options)])
 
+@app.get("/twitch/relationship/",response_class=HTMLResponse)
+async def relationship(logins: List[str] = Query(None)):
+    raise NotImplementedError
 
 @app.get("/twitch/following/{query}", response_class=HTMLResponse)
 async def following_by_popular(request: Request, query: str, by: Optional[str] = 'time',
@@ -921,6 +937,7 @@ def getnewheader() -> None:
 @app.on_event("startup")
 @repeat_every(seconds=2)
 def save_data_ftn() -> None:
+    refresh_search_databases()
     save_datas()
 
 

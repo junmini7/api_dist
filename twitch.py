@@ -719,15 +719,19 @@ def streamers_data_refresh_by_itself_if_not_lang():
             do.append(i)
     return streamers_data_update(do, False, False)
 
-
+def refresh_search_databases():
+    settings.name_to_login = {i['display_name'].lower(): i for i in streamers_data.values()}
+    settings.clear_name_to_login ={''.join([j for j in i['display_name'].lower() if not j.isdigit() and not j in ['_',' ']]): i for i in streamers_data.values()}
+    settings.search_data = list(set(streamers_data)| {i['display_name'].lower() for i in streamers_data.values()})
 def streamer_search(query):
     if query in streamers_data:
         return True, streamers_data[query]
     if query.lower() in streamers_data:
         return True, streamers_data[query.lower()]
-    name_to_login = {i['display_name'].lower(): i for i in streamers_data.values()}
-    if query.lower() in name_to_login:
-        return True, name_to_login[query.lower()]
+    if query.lower() in settings.name_to_login:
+        return True, settings.name_to_login[query.lower()]
+    if ''.join([j for j in query.lower() if not j.isdigit() and not j in ['_',' ']]) in settings.clear_name_to_login:
+        return True, settings.clear_name_to_login[''.join([j for j in query.lower() if not j.isdigit() and not j in ['_',' ']])]
     if isvalidlogin(query):
         print('try to add in streamer search')
         streamer_result = streamer_info(query)
@@ -736,9 +740,7 @@ def streamer_search(query):
             assert 'followers' in streamer_data
             assert 'ranking' in streamer_data
             return True, streamer_data
-
-    search_data = list(set(streamers_data.keys())| {i['display_name'].lower() for i in streamers_data.values()})
-    return False, difflib.get_close_matches(query, search_data)
+    return False, difflib.get_close_matches(query, settings.search_data)
 
 
 def streamer_search_client(query):
@@ -840,21 +842,57 @@ def ranking_refresh():
             streamers_data[k]['ranking'] = {lang: i + 1}
     print('ranking refreshed')
 
+"""
+.icon-flipped {
+    transform: scaleX(-1);
+    -moz-transform: scaleX(-1);
+    -webkit-transform: scaleX(-1);
+    -ms-transform: scaleX(-1);
+}
 
-def follow_icon(known_following, streamer_followed_data, login):
+"""
+def follow_icon(streamer_followed_data, streamer_following_data, login):
+
     if login in streamer_followed_data:
+        if login in streamer_following_data:
+            return "fa-solid fa-heart red"
         return "fa-solid fa-heart"
-    if login in known_following:
+    if login in following_data:
+        if login in streamer_following_data:
+            return "fa-solid fa-heart black"
         return "fa-regular fa-heart"
+    # if login in streamer_following_data:
+    #     return "fa-duotone fa-heart-half"
     return "fa-solid fa-question"
 
+# transparent half heart <i class="fa-solid fa-heart-half-stroke"></i>
+# translucent half heart <i class="fa-duotone fa-heart-half"></i>
 
-def follow_about_heart(known_following, streamer_followed_data, login):
+# full heart <i class="fa-solid fa-heart"></i>
+# transparent empty heart <i class="fa-regular fa-heart"></i>
+# translucent empty heart <i class="fa-duotone fa-heart"></i>
+
+
+
+def follow_about_heart(streamer_followed_data,streamer_following_data, login):
+    # if login in streamer_followed_data:
+    #     if login in streamer_following_data:
+    #         return "fa-solid fa-heart red"
+    #     return "fa-solid fa-heart"
+    # if login in following_data:
+    #     if login in streamer_following_data:
+    #         return "fa-regular fa-heart"
+    #     return False
+    # # if login in streamer_following_data:
+    # #     return "fa-duotone fa-heart-half"
+    # return "fa-solid fa-question"
     if login in streamer_followed_data:
-        return f"<a href='/twitch/following?query={login}'>{streamer_followed_data[login]['when'].date()}</a>"
-    if login in known_following:
-        return f"<a href='/twitch/following?query={login}'>새로고침</a>" #refresh 추가
-    return f"<a href='/twitch/following?query={login}'>확인하기</a>"
+        return f"<a href='../following/?query={login}'>{streamer_followed_data[login]['when'].date()}</a>"
+    if login in streamer_following_data:
+        return f"<a href='../following/?query={login}'>{streamer_following_data[login]['when'].date()}</a>"
+    if login in following_data:
+        return f"<a href='../following/?query={login}'>새로고침</a>" #refresh 추가
+    return f"<a href='../following/?query={login}'>확인하기</a>"
 
 
 def gui_maker(title, variable, url, buttonname, page_url, submit=False):
@@ -863,13 +901,12 @@ def gui_maker(title, variable, url, buttonname, page_url, submit=False):
                                condition=' || '.join([f'$("#{i[0]}").val() == ""' for i in variable]),input_size=12,input_size_2=int(12/len(variable)))
 
 
-def streamer_info_maker(v, now, known_following, followed_streamers_data_dict,original_streamer):
+def streamer_info_maker(v, now, followed_streamers_data_dict, original_streamer,streamer_following_data):
     return streamer_info_template.render(login=v['login'], image_url=v['profile_image_url'], name=v['display_name'],
                                          follower=v['followers'], country=langcode_to_country(v['lang']),
                                          rank=v['ranking'][v['lang']], time=tdtoko(now - v['last_updated']),
-                                         icon=follow_icon(known_following, followed_streamers_data_dict, v['login']),
-                                         following=follow_about_heart(known_following, followed_streamers_data_dict,
-                                                                      v['login']),api_url=api_url,login_disp=v['login']!=v['display_name'].lower(),is_manager=('role' in v and original_streamer in v['role']))
+                                         icon=follow_icon(followed_streamers_data_dict, streamer_following_data,v['login']),
+                                         following=follow_about_heart(followed_streamers_data_dict,streamer_following_data, v['login']), api_url=api_url, login_disp=v['login'] != v['display_name'].lower(), is_manager=('role' in v and original_streamer in v['role']))
 
 def just_crawl_logins(logins_queue):
     streamers_data_update(logins_queue, False, False, False, False)
@@ -926,6 +963,7 @@ refresh_token_dict = load('refresh_token_dict')
 
 followed_update()
 save_datas()
+refresh_search_databases()
 print('loading finished')
 if __name__ == '__main__':
     streamer_info('baalzebb')
