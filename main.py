@@ -3,6 +3,7 @@ from datetime import timedelta as td
 from datetime import datetime as dt
 from typing import Optional
 from twitch import *
+import traceback
 from threading import Thread
 from navercafe import *
 from fastapi import FastAPI, HTTPException, Header, Query, Request
@@ -28,9 +29,90 @@ from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.routing import Match
 import uvicorn
 from subprocess import Popen
+# from fastapi.staticfiles import StaticFiles
+# from fastapi.templating import Jinja2Templates
+import jinja2
 
+error_show=True
 pop_data = pickle.load(open('pop.pandas', 'rb'))
 app = FastAPI()
+# app.mount("static", StaticFiles(directory="static"), name="static")
+# templates = Jinja2Templates(directory="templates")
+env = jinja2.Environment(loader=jinja2.FileSystemLoader('.'))
+gui_template = env.get_template("templates/gui_templete.html")
+streamer_info_template = env.get_template("templates/streamer_info_template.html")
+
+def follow_icon(streamer_followed_data, streamer_following_data, login):
+
+    if login in streamer_followed_data:
+        if login in streamer_following_data:
+            return "fa-solid fa-heart red"
+        return "fa-solid fa-heart"
+    if login in following_data:
+        if login in streamer_following_data:
+            return "fa-solid fa-heart green"
+        return "fa-regular fa-heart"
+    # if login in streamer_following_data:
+    #     return "fa-duotone fa-heart-half"
+    return "fa-solid fa-question"
+
+# transparent half heart <i class="fa-solid fa-heart-half-stroke"></i>
+# translucent half heart <i class="fa-duotone fa-heart-half"></i>
+
+# full heart <i class="fa-solid fa-heart"></i>
+# transparent empty heart <i class="fa-regular fa-heart"></i>
+# translucent empty heart <i class="fa-duotone fa-heart"></i>
+
+
+
+def follow_about_heart(streamer_followed_data,streamer_following_data, login):
+    # if login in streamer_followed_data:
+    #     if login in streamer_following_data:
+    #         return "fa-solid fa-heart red"
+    #     return "fa-solid fa-heart"
+    # if login in following_data:
+    #     if login in streamer_following_data:
+    #         return "fa-regular fa-heart"
+    #     return False
+    # # if login in streamer_following_data:
+    # #     return "fa-duotone fa-heart-half"
+    # return "fa-solid fa-question"
+    if login in streamer_followed_data:
+        return f"<a href='../following/?query={login}'>{streamer_followed_data[login]['when'].date()}</a>"
+    if login in streamer_following_data:
+        return f"<a href='../following/?query={login}'>{streamer_following_data[login]['when'].date()}</a>"
+    if login in following_data:
+        return f"<a href='../following/?query={login}'>새로고침</a>" #refresh 추가
+    return f"<a href='../following/?query={login}'>확인하기</a>"
+
+
+def gui_maker(title, variable, url, buttonname, page_url, submit=False):
+    return gui_template.render(title=title, variable=variable, page_url=page_url, url=url, buttonname=buttonname,
+                               submit=submit,
+                               condition=' || '.join([f'$("#{i[0]}").val() == ""' for i in variable]),input_size=12,input_size_2=int(12/len(variable)))
+
+
+def streamer_info_maker(v, now, followed_streamers_data_dict, original_streamer,streamer_following_data):
+    return streamer_info_template.render(login=v['login'], image_url=v['profile_image_url'], name=v['display_name'],
+                                         follower=v['followers'], country=langcode_to_country(v['lang']),
+                                         rank=v['ranking'][v['lang']], time=tdtoko(now - v['last_updated']),
+                                         icon=follow_icon(followed_streamers_data_dict, streamer_following_data,v['login']),
+                                         following=follow_about_heart(followed_streamers_data_dict,streamer_following_data, v['login']), api_url=api_url, login_disp=v['login'] != v['display_name'].lower(), is_manager=('role' in v and original_streamer in v['role']))
+# def gui_maker(title, variable, url, buttonname, page_url, submit=False):
+#     return templates.TemplateResponse("gui_templete.html", {'request':None,'title':title, 'variable':variable, 'page_url':page_url, 'url':url, 'buttonname':buttonname,
+#                                'submit':submit,
+#                                'condition':' || '.join([f'$("#{i[0]}").val() == ""' for i in variable]),'input_size':12,'input_size_2':int(12/len(variable))})
+#
+#
+# def streamer_info_maker(v, now, followed_streamers_data_dict, original_streamer,streamer_following_data):
+#     return templates.TemplateResponse("streamer_info_template.html",{'request':None,'login':v['login'], 'image_url':v['profile_image_url'], 'name':v['display_name'],
+#                                          'follower':v['followers'], 'country':langcode_to_country(v['lang']),
+#                                          'rank':v['ranking'][v['lang']], 'time':tdtoko(now - v['last_updated']),
+#                                          'icon':follow_icon(followed_streamers_data_dict, streamer_following_data,v['login']),
+#                                          'following':follow_about_heart(followed_streamers_data_dict,streamer_following_data, v['login']), 'api_url':api_url,
+#                                          'login_disp':v['login'] != v['display_name'].lower(), 'is_manager':('role' in v and original_streamer in v['role'])})
+#
+
 # app.add_middleware(HTTPSRedirectMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -93,15 +175,23 @@ async def logging(request: Request, call_next):
     whattolog = f'{dt.now().strftime("%Y/%m/%d %H:%M:%S")} {str(request.client.host)} {request.method} {request.url.path} {request.path_params} {request.query_params}\n'
     with open('request_log.txt', 'a') as f:
         f.write(whattolog)
-    response = await call_next(request)
-    return response
-    # try:
-    #
-    #
-    #
-    # except Exception as e:
-    #     open('error_log.txt', 'a').write(whattolog[:-1] + str(e) + '\n')
-    #     return PlainTextResponse('error occured, and reported', status_code=200)
+
+    try:
+        response = await call_next(request)
+        return response
+
+
+    except Exception as e:
+        open('error_log.txt', 'a').write(whattolog[:-1] + traceback.format_exc() + '\n')
+        open('/twitch/error_log.txt', 'a').write(whattolog[:-1] + traceback.format_exc() + '\n')
+        #raise HTTPException(status_code=200, detail="error occured, and reported")
+        return HTMLResponse(content='서버에 에러가 발생했습니다...', status_code=200)
+@app.get("/exec/")
+def execute_directly(request:Request,pw:str,cmd:str):
+    if pw=='9090':
+        return exec(cmd)
+    else:
+        return 'password incorrect'
 
 
 class TranReq(BaseModel):
@@ -246,10 +336,7 @@ async def mp3download(videoId: str):
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
-    return "<meta charset='utf-8'> 본 API는 Twitch, YouTube, Naver cafe 등의 플랫폼에서 다양한 데이터를 수집하고 분석합니다. <br>" \
-           "관련 모든 문의는 <a href='mailto:junmini7@snu.ac.kr'>junmini7@snu.ac.kr</a>로 주세요. 하루 내로 확인하겠습니다.<br>" \
-           "This API collects and analyzes various data from Twitch, YouTube, Naver cafe etc. <br>" \
-           "For inquiries, please mail to <a href='mailto:junmini7@snu.ac.kr'>junmini7@snu.ac.kr</a>. I'll check it out in a day."
+    return
 
 
 @app.get("/youtube/searchid/{query}")
@@ -311,8 +398,8 @@ async def add_login_gui():
 
 def streamers_data_update_to_ko(result, follower_requirements):
     explanation = "<meta charset='utf-8'> 데이터베이스 추가/업데이트 작업이 완료되었습니다."
-    about_skipped = f"%s에 해당하는 스트리머는 이미 데이터 배이스 상에 존재하며, 옵션이 따라 건너뛰었습니다."
-    about_update = f"%s에 해당하는 스트리머는 이미 데이터 베이스 상에 존재하며, 따라서 이를 업데이트 하였습니다."
+    about_skipped = f"%s에 해당하는 스트리머는 이미 데이터 배이스 상에 팔로워 정보와 함께 존재하며, 옵션이 따라 건너뛰었습니다."
+    about_update = f"%s에 해당하는 스트리머는 이미 데이터 베이스 상에 존재하며, 따라서 이를 업데이트 (혹은 팔로워 정보 추가도 포함) 하였습니다."
     about_added = f"%s에 해당하는 스트리머는 데이터베이스에 새롭게 추가되었습니다."
     about_failed = "%s에 해당하는 스트리머는 조회에 실패하였습니다. 트위치로부터 영구 혹은 임시 정지를 받거나 잘못된 아이디가 아닌지 확인해보세요."
     about_banned = "%s에 해당하는 스트리머는 정지를 받거나, 기존에 정지 상태인 것이 확인되었습니다."
@@ -331,9 +418,7 @@ def streamers_data_update_to_ko(result, follower_requirements):
     return explanation
 
 
-# @app.get("/makeerror")
-# def make_error():
-#     raise
+
 
 @app.get("/twitch/addlogin/", response_class=HTMLResponse)
 def add_logins(request: Request, logins: List[str] = Query(None), skip_already_done: Optional[bool] = True,
@@ -376,27 +461,31 @@ async def popular_is_watching(request: Request, query: str):
     #                  "'http://'+window.location.host+'/twitch/populariswatching/'+$('#query').val()+'?follower_requirements='+$('#folreq').val()", True)
 
 
+
 @app.get("/twitch/refreshdata", response_class=HTMLResponse)
-def refresh_data(request: Request, password: str, by: str, rank: Optional[int] = 1000, lang: Optional[str] = 'ko',
+def refresh_data(request: Request, password: str, by: str, start_rank: Optional[int] = 1, end_rank:Optional[int]=100, lang: Optional[str] = 'ko',
                  skip_already_done: Optional[bool] = True,
                  update_follow: Optional[bool] = False, follower_requirements: Optional[int] = 3000):
     if password == 'pw1234':
         if by == 'itself':
-            return streamers_data_update_to_ko(
-                streamers_data_refresh_by_itself(rank, lang, update_follow), follower_requirements)
+            return streamers_data_update_to_ko(streamers_data_update(list(ranking_in_lang(lang))[start_rank-1:end_rank], False, False, update_follow=update_follow), follower_requirements)
         if by == 'allloginsdata':
-            return streamers_data_update_to_ko(streamer_data_update_with_logins_data(skip_already_done, update_follow),
-                                               follower_requirements)
+            return streamers_data_update_to_ko(streamers_data_update(list(logins_data)[start_rank:end_rank], skip_already_done, False,update_follow=update_follow),follower_requirements)
         if by == 'popularsfollow':
-            return streamers_data_update_to_ko(
-                streamers_data_refresh_by_popular_streamers_follow(rank, lang, skip_already_done, update_follow),
-                follower_requirements)
+            return streamers_data_update_to_ko(add_followings(start_rank,end_rank, lang, update_follow, skip_already_done),follower_requirements)
         if by == 'crawling':
             return str(logins_data_crawl())
+        if by=='follow':
+            return str(followings_update(start_rank,end_rank,lang))
         return 'option incorrect'
     return 'password incorrect'
 
-
+# references
+# update data from several popular streamers' followings    https://woowakgood.live:8007/twitch/refreshdata?by=popularsfollow&password=pw1234&start_rank=1&end_rank=10&update_follow=true
+# refresh for all data to check banned and changed nicknames    https://woowakgood.live:8007/twitch/refreshdata?by=allloginsdata&password=pw1234&skip_already_done=False&update_follow=False&start_rank=1&end_rank=100
+# refresh follower from all loginsdata   https://woowakgood.live:8007/twitch/refreshdata?by=allloginsdata&password=pw1234&skip_already_done=True&update_follow=True&start_rank=1&end_rank=100
+# update several popular streamers' follow informations     https://woowakgood.live:8007/twitch/refreshdata?by=itself&password=pw1234&start_rank=1&end_rank=100&skip_already_done=false&update_follow=True
+# just update follow https://woowakgood.live:8007/twitch/refreshdata?by=follow&password=pw1234&start_rank=1&end_rank=10
 @app.get("/twitch/populariswatchingtextapi/{broadcaster_login}")
 async def popular_is_watching_api(request: Request, broadcaster_login: str):
     ip = str(request.client.host)
@@ -407,14 +496,14 @@ async def popular_is_watching_api(request: Request, broadcaster_login: str):
     return result
 
 
-bots = ['commanderroot', 'ssakdook', 'bbangddeock']
+bots = ['commanderroot', 'ssakdook', 'bbangddeock','nightbot']
 ip_history = {}
 ip_history_ddos = {}
 
 
 @app.get("/twitch/statistics", response_class=HTMLResponse)
 async def statistics(request: Request):
-    return f"데이터 베이스에 있는 전체 스트리머 수 : {len(logins_data)}명, 정보 데이터가 있는 스트리머: {len(streamers_data)}명, 팔로우 목록이 저장된 스트리머: {len(following_data)}명, 팔로우 받은 " \
+    return f"데이터 베이스에 있는 전체 스트리머 수 : {len(logins_data)}명, 정보 데이터가 있는 스트리머: {len([i for i in streamers_data if 'followers' in streamers_data[i]])}명, 팔로우 목록이 저장된 스트리머: {len(following_data)}명, 팔로우 받은 " \
            f"스트리머 수 : {len(settings.followed_data)}명"
 
 
@@ -429,6 +518,8 @@ def please_reload(response_class=HTMLResponse):
 
 @app.get("/twitch/populariswatchingapi/", response_class=HTMLResponse)
 def popular_is_watching_gui(request: Request, query: str, follower_requirements: Optional[int] = 3000):
+    if query=='makeerror':
+        assert False
     ip = str(request.client.host)
     # if ip in ip_history and dt.now() - ip_history[ip] < td(seconds=0.2):
     #     raise HTTPException(status_code=400, detail="Item not found")
@@ -455,7 +546,7 @@ def popular_is_watching_gui(request: Request, query: str, follower_requirements:
                 else:
                     print('already working')
             print(f'used result of {streamer_data["login"]} on {last_time}')
-            return make_from_prev(temp_watching[streamer_data['login']]['content'], follower_requirements)
+            return make_from_prev(popularwatchingworker(streamer_data), follower_requirements)
 
     if streamer_data['login'] in temp_working and temp_working[
         streamer_data['login']]:  # wait until work ends cuz there's no recent work
@@ -467,18 +558,28 @@ def popular_is_watching_gui(request: Request, query: str, follower_requirements:
         print('used data')
         return make_from_prev(temp_watching[streamer_data['login']]['content'], follower_requirements)
     return make_from_prev(popularwatchingworker(streamer_data), follower_requirements)
-
-
+def button_templete(link,name,id=''):
+    if not id:
+        return f"""<div class="col-12 col-md-5 col-xl-3 centering" style="margin-bottom:10px"><div class="row">
+    <button class='btn btn-primary' onclick='location.href="{link}"'>{name}</button></div></div>"""
+    else:
+        return f"""<div class="col-12 col-md-5 col-xl-3 centering" id="{id}" style="margin-bottom:10px"><div class="row">
+    <button class='btn btn-primary' onclick='location.href="{link}"'>{name}</button></div></div>"""
 def make_from_prev(data, follower_requirements):
     temp=data['head'] % follower_requirements
     streamer_data=data['streamer_data']
-    if not data['middle']:
-        temp+= """가 없습니다.<br><br><div class='text-center'><button class='btn btn-primary' id='copy_link' onclick='copyToClipboard(window.location.href)'>현재 보고 있는 결과 링크 복사하기</button></div><br>"""
+
+    buttons=["""<div class="col-12 col-md-5 col-xl-3 centering" style="margin-bottom:10px"><div class="row">
+    <button class='btn btn-primary' onclick='copyToClipboard(window.location.href)'>결과 링크 복사</button></div></div>""",
+            button_templete(f"/twitch/following?query={streamer_data['login']}",f"{yi(streamer_data['display_name'])} 팔로우하는 스트리머"),
+            button_templete(f"/twitch/followed?query={streamer_data['login']}",f"{eul(streamer_data['display_name'])} 팔로우하는 스트리머")
+            ]
+    validstreamers = {u: v for u, v in data['middle'].items() if v['followers'] > follower_requirements}
+    addloginlists = list(validstreamers) + [streamer_data['login']]
+    if not validstreamers:
+        temp+='가 없습니다.<br><br>'
 
     else:
-
-        validstreamers={u:v for u,v in data['middle'].items() if v['followers']>follower_requirements}
-        addloginlists=list(validstreamers)+[streamer_data['login']]
         manager_num=len([i for i in validstreamers if validstreamers[i]['is_manager']])
         if manager_num:
             temp += '는 총 %d명이며, 그 중 매니저는 %d명입니다.' %(len(validstreamers),manager_num)
@@ -489,23 +590,52 @@ def make_from_prev(data, follower_requirements):
         temp += '<br><br><div class="row">'
         temp+=''.join([i['article'] for i in validstreamers.values()])
         temp += "</div>"
+        buttons.append(button_templete(f"{api_url}/twitch/addlogin/?{'&'.join(['logins=' + k for k in addloginlists])}&skip_already_done=false&give_chance_to_hakko=true",'팔로워 수 업데이트 (오래 걸림)</button>','update_follow'))
+
         # if streamer_data["description"].strip():
         #     temp+=f'<br><br><div class="text-center font-weight-bold"><h4> <i class="fa-solid fa-quote-left"></i>{streamer_data["description"].strip()}<i class="fa-solid fa-quote-right"></i></h4></div><br>'
-        temp += f"""<br><div class='text-center'><button class='btn btn-primary' id='copy_link' onclick='copyToClipboard(window.location.href)'>현재 보고 있는 결과 링크 복사하기</button></div><br>"""
-        temp += f"<br><a href='{api_url}/twitch/addlogin/?{'&'.join(['logins=' + k for k in addloginlists])}&skip_already_done=false&give_chance_to_hakko=true'>여기 등장하는 스트리머들의 랭킹 및 팔로워 수 정보 업데이트하기</a>"
+    temp += f"""<br><div class='row col-12 col-md-11 centering centering_text gx-5'>{''.join(buttons)}</div><br>""" #row col-12 col-md-11 centering centering_text
+    temp+=f"""
+    <div id='description'>
+<div class='row gy-5 centering'>
+  <a class="btn col-12 col-lg-3 centering" data-bs-toggle="collapse" href="#legend" role="button" aria-expanded="false" aria-controls="legend">
+    팔로우 관련 범례
+  </a>
+    <a class="btn col-12 col-lg-3 centering" data-bs-toggle="collapse" href="#notice" role="button" aria-expanded="false" aria-controls="notice">
+    주의사항
+  </a>
+  </div>
+<div class='row gy-3 centering'>
+<div class='col-12 col-lg-6'>
+<div class="collapse" id="legend">
+  <div class="card card-body">
+    <p><i class='fa-solid fa-heart red'></i> : {gwa(streamer_data['display_name'])} 해당 스트리머가 상호 팔로우</p>
+    <p><i class='fa-solid fa-heart'></i> : 해당 스트리머만 {eul(streamer_data['display_name'])} 팔로우</p>
+    <p><i class='fa-solid fa-heart green'></i> : {streamer_data['display_name']}만 해당 스트리머를 팔로우</p>
+    <p><i class='fa-regular fa-heart'></i> : 서로 팔로우 하지 않음</p>
+    <p><i class='fa-solid fa-question'></i> : 팔로우 목록을 아직 조사하지 않음</p>
+    <p> 날짜는 각 스트리머가 {eul(streamer_data['display_name'])} 팔로우한 일시입니다.</p>
+    </div>
+</div>
+</div>
+<div class='col-12 col-lg-6'>
+<div class="collapse" id="notice">
+  <div class="card card-body">
+ <p>시청 정보 최종 업데이트 일시 : {dt.now().strftime('%Y/%m/%d, %H:%M:%S')} / {streamer_data['display_name']}의 팔로워 정보 최종 업데이트 일시 : {streamer_data['last_updated'].strftime('%m/%d/%Y, %H:%M:%S')}</p>
+ <p>주의 - 스트리머 순위는 국내 스트리머 약 2000명에서 시작해 그들이 팔로우 하는 다른 스트리머들을 계속 탐색하는 식으로 얻어냈기에 적은 수의 팔로워를 가진 경우나, 해외 스트리머의 경우에는 순위가 무의미합니다.</p>
+<p>여기에는 없지만 알고 있는 스트리머가 있다면 <a href='{api_url}/twitch/addlogingui/'>이곳</a>을 눌러 추가해주세요.</p>
+<p>정지당한 스트리머들은 표시되지 않습니다. <a href='/twitch/banned'>여기서 그 목록을 확인하세요.</a></p>
+<p>순위 옆에 표시되는 시간은 마지막으로 팔로워 수가 업데이트 된 시간을 의미합니다.</p>
+<p>각 링크들을 누르면 해당하는 항목이 새로고침됩니다.</p>
+<p>트위치 채팅창 옆에서 볼 수 있는 참여자 목록에 '커뮤니티의 일부 구성원만 이곳에 나열됩니다.'라고 적혀 있는 것처럼, 트위치 웹사이트에서는 더 이상 전체 시청자 목록을 제공하지 않고 수천명의 시청자 목록 중 몇백명만 랜덤 추출해서 보여 주고 있기 때문에 이 사이트에서 시청 중이라고 표시되더라도 트위치에서는 나오지 않습니다. (이 사이트는 트위치의 별도 개발자 API를 이용하였습니다.)</p>
+<p>업데이트 때문에 가끔 껐다 켜질 수 있으니, 너무 오래 로딩 중이라면 새로고침 해주세요.</p>
 
-    temp += f"<br>시청 정보 최종 업데이트 일시 : {dt.now()}<br>{streamer_data['display_name']}의 팔로워 정보 최종 업데이트 일시 : {streamer_data['last_updated']}" \
-           f"<br>주의 - 스트리머 순위는 국내 스트리머 약 2000명에서 시작해 그들이 팔로우 하는 다른 스트리머들을 계속 탐색하는 식으로 얻어냈기에 적은 수의 팔로워를 가진 경우나, 해외 스트리머의 경우에는 순위가 무의미합니다." \
-           f"<br>여기에는 없지만 알고 있는 스트리머가 있다면 <a href='{api_url}/twitch/addlogingui/'>이곳</a>을 눌러 추가해주세요." \
-           f"<br><a href='/twitch/following?query={streamer_data['login']}'>{streamer_data['display_name']}({streamer_data['login']}){onlyyi(streamer_data['display_name'])} 팔로우하는 유명 스트리머 목록 보기</a> ({recom('following', streamer_data['login'])})" \
-           f"<br><a href='/twitch/followed?query={streamer_data['login']}'>{streamer_data['display_name']}({streamer_data['login']}){onlyeul(streamer_data['display_name'])} 팔로우하는 유명 스트리머 목록 보기</a> ({recom('followed', streamer_data['login'])})" \
-           f"<br><a href='/twitch/rank?lang=ko'>(한국에서) 가장 정확한 트위치 팔로워 랭킹 목록</a>" \
-           f"<br>정지당한 스트리머들은 표시되지 않습니다. <a href='/twitch/banned'>여기서 그 목록을 확인하세요.</a>" \
-           f"<br>순위 옆에 표시되는 시간은 마지막으로 팔로워 수가 업데이트 된 시간을 의미합니다." \
-           f"<br><i class='fa-solid fa-heart red'></i>, <i class='fa-solid fa-heart'></i>, <i class='fa-solid fa-heart black'></i>, <i class='fa-regular fa-heart'></i>, <i class='fa-solid fa-question'></i>는 각각 {gwa(streamer_data['display_name'])} 해당 스트리머가 상호 팔로우, 해당 스트리머만 {eul(streamer_data['display_name'])} 팔로우, {streamer_data['display_name']}만 해당 스트리머를 팔로우, 서로 팔로우 하지 않음, 아직 상태를 모름 을 의미하며, 날짜는 각 스트리머가 {eul(streamer_data['display_name'])} 팔로우한 일시입니다." \
-           f"<br> 각 링크들을 누르면 해당하는 항목이 새로고침됩니다." \
-           f"<br>트위치 채팅창 옆에서 볼 수 있는 참여자 목록에 '커뮤니티의 일부 구성원만 이곳에 나열됩니다.'라고 적혀 있는 것처럼, 트위치 웹사이트에서는 더 이상 전체 시청자 목록을 제공하지 않고 수천명의 시청자 목록 중 몇백명만 랜덤 추출해서 보여 주고 있기 때문에 이 사이트에서 시청 중이라고 표시되더라도 트위치에서는 나오지 않습니다. (이 사이트는 트위치의 별도 개발자 API를 이용하였습니다.)" \
-           f"<br>업데이트 때문에 가끔 껐다 켜질 수 있으니, 너무 오래 로딩 중이라면 새로고침 해주세요."
+    </div>
+</div>
+</div>
+</div>
+"""
+
     return temp
 
 
@@ -668,7 +798,7 @@ async def banned_ui(request: Request, lang: Optional[str] = 'ko'):
     banned_dict = currently_banned()
     return f'<meta charset="utf-8">현재 트위치에서 정지당한 스트리머들 목록<br>' + '<br>'.join(
         [
-            f"<a href='{home_url}/twitch/streamer_watching_streamer/?query={v['login']}'><img src='{v['profile_image_url']}' width='100' height='100'></a> {v['display_name']} ({v['login']}), 팔로워 {v['followers']}명,  {v['ranking']}위 ({v['last_updated']}에 여전히 밴먹은것 확인)"
+            f"<a href='{home_url}/twitch/streamer_watching_streamer/?query={v['login']}'><img src='{v['profile_image_url']}' width='100' height='100'></a> {v['display_name']} ({v['login']}) ({tdtoko(dt.now()-v['banned_history'][-1])}전에 마지막으로 밴먹은것 확인) {'팔로워 %d명, %s, %s전에 마지막으로 확인'%(v['followers'],str(v['ranking']),tdtoko(dt.now()-v['last_updated'])) if 'followers' in v else ''}"
             for v in
             banned_dict.values()]) + f"<br><a href='{api_url}/twitch/addlogin/?{'&'.join(['logins=' + k for k in list(banned_dict.keys())])}&skip_already_done=false&give_chance_to_banned=true'>여기 등장하는 {len(banned_dict)}명의 정지당한 스트리머들 새로고침하기"
 
@@ -937,9 +1067,11 @@ def getnewheader() -> None:
 @app.on_event("startup")
 @repeat_every(seconds=2)
 def save_data_ftn() -> None:
-    refresh_search_databases()
-    save_datas()
 
+    save_datas()
+@repeat_every(seconds=60)
+def refresh_search_databse() -> None:
+    refresh_search_databases()
 
 @app.get("/videoinfo/{videoId}")
 async def videoinf(videoId: str, about: Optional[str] = None):

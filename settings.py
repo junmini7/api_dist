@@ -3,3 +3,4 @@ def init():
     followed_data={}
     name_to_login = {}
     clear_name_to_login = {}
+    print('settings initialized')
